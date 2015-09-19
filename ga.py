@@ -41,10 +41,12 @@ class Puzzle(object):
         self.solution = None
         self.bestFitness = -1
 
+        #Stat variables
+        self.generationNum = 0
+        self.generationWhenSolutionFound = 0
+
     #Runs puzzle
     def run(self):
-        logging.debug("Running puzzle...")
-
         self.parseFile()
 
         initPopSize = self.getInitPopSize()
@@ -64,6 +66,8 @@ class Puzzle(object):
         self.findSolution()
 
         logging.debug("Solution %s", self.solution)
+
+        self.printStats()
 
     #Checks if the timer has elapsed
     def timerElapsed(self):
@@ -108,7 +112,13 @@ class Puzzle(object):
 
             count += 1
 
-    def getInputRepresentation(self, string):
+    def printStats(self):
+        print "Solution: " + self.convertRepresentationToString(self.solution)
+        print "Solution score: %d" % self.getScore(self.solution)
+        print "Generations the algorithm ran for: %d" % self.generationNum
+        print "Generation when solution was found: %d" % self.generationWhenSolutionFound
+
+    def getInputRepresentation(self, str_list):
         raise Exception("getInputRepresenation() is not implemented.")
 
     def createGene(self):
@@ -125,6 +135,12 @@ class Puzzle(object):
 
     def getInitPopSize(self):
         raise Exception("getInitPopSize() is not implemented.")
+
+    def convertRepresentationToString(self, gene):
+        raise Exception("convertRepresentationToString() is not implemented.")
+
+    def getScore(self, gene):
+        raise Exception("getScore() is not implemented.")
 
 class PuzzleOne(Puzzle):
     def getInputRepresentation(self, str_list):
@@ -145,19 +161,22 @@ class PuzzleOne(Puzzle):
             if self.timerElapsed():
                 break
 
+            #Update stats
+            self.generationNum += 1
+
             # Estimate fitness for each gene & return solution, if found
             for gene in self.population:
                 fitness = self.estimateFitness(gene)
 
-                #Solution found, exit
-                if fitness == self.goal:
-                    self.solution = gene
-                    return
-
                 #Tries to estimate the best fitness so far
                 if fitness > self.bestFitness:
-                    self.bestFitness = fitness
                     self.solution = gene
+                    self.generationWhenSolutionFound = self.generationNum
+                    self.bestFitness = fitness
+
+                    #Solution found, exit
+                    if fitness == self.goal:
+                        return
 
                 self.population[gene] = fitness
 
@@ -195,20 +214,31 @@ class PuzzleOne(Puzzle):
             self.population = children
 
     def estimateFitness(self, gene):
-        sum =0
+        sum = 0
         i = 0
+
         for chromosome in gene:
-            sum+= chromosome*self.input[i]
-            i+=1
-        difference = sum-self.goal
+            sum += chromosome*self.input[i]
+            i += 1
+
+        difference = sum - self.goal
+
         if difference <= 0:
             return sum
         else:
             return 1/difference
 
+    def convertRepresentationToString(self, gene):
+        return ' '.join([str(self.input[i]) for i in range(len(gene)) if gene[i]])
+
+    def getScore(self, gene):
+        score = sum([self.input[i] for i in range(len(gene)) if gene[i]])
+
+        return score if score <= self.goal else 0
+
 class PuzzleTwo(Puzzle):
-    def getInputRepresentation(self, string):
-        return
+    def getInputRepresentation(self, str_list):
+        return int(str_list[0])
 
     def createGene(self):
         return
@@ -223,6 +253,12 @@ class PuzzleTwo(Puzzle):
         return
 
     def estimateFitness(self, gene):
+        return
+
+    def convertRepresentationToString(self, gene):
+        return
+
+    def getScore(self, gene):
         return
 
 class PuzzleThree(Puzzle):
@@ -242,7 +278,13 @@ class PuzzleThree(Puzzle):
         return
 
     def estimateFitness(self, gene):
-        return 
+        return
+
+    def convertRepresentationToString(self, gene):
+        return
+
+    def getScore(self, gene):
+        return
 
 if __name__ == "__main__":
     (puzzleNum, filePath, secs) = getArgs()
