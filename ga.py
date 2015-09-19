@@ -7,6 +7,7 @@ import sys, re, math, random, logging, time
 DEBUG = 1
 PUZZLE1_INIT_POP = 50
 PUZZLE2_INIT_POP = 6
+PUZZLE3_INIT_POP = 3
 MU = .999
 
 def getArgs():
@@ -16,61 +17,6 @@ def getArgs():
         raise Exception("The number of arguments should be 3")
 
     return (int(sys.argv[1]), sys.argv[2], int(sys.argv[3]))
-
-class Puzzle(object):
-    def __init__(self, filePath, secondsToWork):
-        self.filePath = filePath
-        self.secondsToWork = secondsToWork
-        self.population = {}
-        self.input = []
-        self.goal = None
-        self.executionStart = None
-        self.solution = None
-        self.bestFitness = -1
-
-    #Checks if the timer has elapsed
-    def timerElapsed(self):
-        elapsed = False
-
-        if self.executionStart == None:
-            self.executionStart = time.time()
-        else:
-            if (time.time() - self.executionStart) > self.secondsToWork:
-                elapsed = True
-
-        return elapsed
-
-    #Creates a gene with the specified length with random values in range [min, max]
-    def createGene(self, min, max, length, factorial):
-        if not factorial:
-            return tuple(random.randint(min, max) for x in range(length))
-        else:
-            return tuple(random.randint(min, max) for x in range(length)) #TODO
-
-
-    def weighted_choice(self, population):
-        total = sum(weight for gene, weight in population.iteritems())
-        r = random.uniform(0, total)
-        upto = 0
-
-        for gene, weight in population.iteritems():
-            if upto + weight >= r:
-                return gene
-
-            upto += weight
-
-    #Abstract methods:
-    def run(self):
-        raise Exception("run() is not implemented.")
-
-    def findSolution(self):
-        raise Exception("findSolution() is not implemented.")
-
-    def estimateFitness(self, gene):
-        raise Exception("estimateFitness() is not implemented.")
-
-    def parseFile(self):
-        raise Exception("parseFile() is not implemented.")
 
 class PuzzleFactory:
     @staticmethod
@@ -84,21 +30,32 @@ class PuzzleFactory:
         else:
             return None
 
-class PuzzleOne(Puzzle):
+class Puzzle(object):
+    def __init__(self, filePath, secondsToWork):
+        self.filePath = filePath
+        self.secondsToWork = secondsToWork
+        self.population = {}
+        self.input = []
+        self.goal = None
+        self.executionStart = None
+        self.solution = None
+        self.bestFitness = -1
+
+    #Runs puzzle
     def run(self):
-        logging.debug("Running puzzle one...")
+        logging.debug("Running puzzle...")
 
         self.parseFile()
 
-        #if the number you are paying with is bigger than the number of possible states, use the number of possible states
-        if PUZZLE1_INIT_POP > math.pow(2, len(self.input)):
-            initPopSize = math.pow(2, len(self.input))
-        else:
-            initPopSize = PUZZLE1_INIT_POP
+        initPopSize = self.getInitPopSize()
+        maxPopSize = self.getMaxPopSize()
 
+        #if the number you are paying with is bigger than the number of possible states, use the number of possible states
+        if initPopSize > maxPopSize:
+            initPopSize = maxPopSize
 
         for i in range(initPopSize):
-            self.population[self.createGene(0, 1, len(self.input), False)] = 0
+            self.population[self.createGene()] = 0
 
         self.initPopSize = len(self.population)
 
@@ -107,6 +64,80 @@ class PuzzleOne(Puzzle):
         self.findSolution()
 
         logging.debug("Solution %s", self.solution)
+
+    #Checks if the timer has elapsed
+    def timerElapsed(self):
+        elapsed = False
+
+        if self.executionStart == None:
+            self.executionStart = time.time()
+        else:
+            if (time.time() - self.executionStart) > self.secondsToWork:
+                elapsed = True
+
+        return elapsed
+
+    #Picks a sample from the population with
+    def weighted_choice(self, population):
+        total = sum(weight for gene, weight in population.iteritems())
+        r = random.uniform(0, total)
+        upto = 0
+
+        for gene, weight in population.iteritems():
+            if upto + weight >= r:
+                return gene
+
+            upto += weight
+
+    #Parses file to extract input and goal representations
+    def parseFile(self):
+        file = open(self.filePath, "r")
+        rows = file.readlines()
+
+        self.input = []
+        count = 0
+
+        for row in rows:
+            str_list = filter(None, re.split('\t|\s|\n|\v|\r', row))
+            representation = self.getInputRepresentation(str_list)
+
+            if count == 0:
+                self.goal = representation
+            else:
+                self.input.append(representation)
+
+            count += 1
+
+    def getInputRepresentation(self, string):
+        raise Exception("getInputRepresenation() is not implemented.")
+
+    def createGene(self):
+        raise Exception("createGene() is not implemented.")
+
+    def findSolution(self):
+        raise Exception("findSolution() is not implemented.")
+
+    def estimateFitness(self, gene):
+        raise Exception("estimateFitness() is not implemented.")
+
+    def getMaxPopSize(self):
+        raise Exception("getMaxPopSize() is not implemented.")
+
+    def getInitPopSize(self):
+        raise Exception("getInitPopSize() is not implemented.")
+
+class PuzzleOne(Puzzle):
+    def getInputRepresentation(self, str_list):
+        return int(str_list[0])
+
+    def createGene(self):
+        return tuple(random.randint(0, 1) for x in range(len(self.input)))
+
+    def getMaxPopSize(self):
+        return int(math.pow(2, len(self.input)))
+
+    def getInitPopSize(self):
+        return PUZZLE1_INIT_POP
 
     def findSolution(self):
         while True:
@@ -175,65 +206,43 @@ class PuzzleOne(Puzzle):
         else:
             return 1/difference
 
-    def parseFile(self):
-        file = open(self.filePath, "r")
-        rows = file.readlines()
-
-        self.input = []
-        count = 0
-
-        for row in rows:
-            chars = filter(None, re.split('\t|\s|\n|\v|\r', row))
-            num = int(chars[0])
-
-            if count == 0:
-                self.goal = num
-            else:
-                self.input.append(num)
-
-            count += 1
-
 class PuzzleTwo(Puzzle):
-    def run(self):
-        logging.debug("Running puzzle two...")
-
-        self.parseFile()
-
-        #if the number you are paying with is bigger than the number of possible states, use the number of possible states
-        if PUZZLE2_INIT_POP > math.pow(2, len(self.input)):
-            initPopSize = math.pow(2, len(self.input))
-        else:
-            initPopSize = PUZZLE2_INIT_POP
-
-        for i in range(initPopSize):
-            self.population.add(self.createGene(0, 2, len(self.input), 2))
-
-        logging.debug("Init population %s", self.population)
-
-        self.findSolution()
-
-        logging.debug("Solution %s", self.solution)
+    def getInputRepresentation(self, string):
         return
 
-    def parseFile(self):
-        file = open(self.filePath, "r")
-        rows = file.readlines()
+    def createGene(self):
+        return
 
-        self.input = []
-        count = 0
+    def getMaxPopSize(self):
+        return
 
-        for row in rows:
-            chars = filter(None, re.split('\t|\s|\n|\v|\r', row))
-            num = int(chars[0])
-	    self.input.append(num)
-            count += 1
+    def getInitPopSize(self):
+        return
+
+    def findSolution(self):
+        return
+
+    def estimateFitness(self, gene):
+        return
 
 class PuzzleThree(Puzzle):
-    def run(self):
+    def getInputRepresentation(self, string):
         return
 
-    def parseFile(self):
+    def createGene(self):
         return
+
+    def getMaxPopSize(self):
+        return
+
+    def getInitPopSize(self):
+        return
+
+    def findSolution(self):
+        return
+
+    def estimateFitness(self, gene):
+        return 
 
 if __name__ == "__main__":
     (puzzleNum, filePath, secs) = getArgs()
