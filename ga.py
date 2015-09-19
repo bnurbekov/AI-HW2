@@ -6,6 +6,7 @@ import sys, re, math, random, logging, time
 
 DEBUG = 1
 PUZZLE1_INIT_POP = 5
+MU = .999
 
 def getArgs():
     validArgNum = len(sys.argv) == 4
@@ -19,7 +20,7 @@ class Puzzle(object):
     def __init__(self, filePath, secondsToWork):
         self.filePath = filePath
         self.secondsToWork = secondsToWork
-        self.population = []
+        self.population = set()
         self.input = []
         self.goal = None
         self.executionStart = None
@@ -37,6 +38,30 @@ class Puzzle(object):
 
         return elapsed
 
+    #Creates a gene with the specified length with random values in range [min, max]
+    def createGene(self, min, max, length, factorial):
+        if not factorial:
+            return tuple(random.randint(min, max) for x in range(length))
+        else:
+            return tuple(random.randint(min, max) for x in range(length)) #TODO
+
+
+    def weighted_choice(self, weights):
+        total = sum(weights)
+        r = random.uniform(0, total)
+        upto = 0
+        index = 0
+        for w in weights:
+            if upto + w >= r:
+                return index
+
+            upto += w
+            index += 1
+
+    def competition(self, a, b):
+        return
+
+    #Abstract methods:
     def run(self):
         raise Exception("run() is not implemented.")
 
@@ -67,16 +92,15 @@ class PuzzleOne(Puzzle):
 
         self.parseFile()
 
+        #if the number you are paying with is bigger than the number of possible states, use the number of possible states
         if PUZZLE1_INIT_POP > math.pow(2, len(self.input)):
             initPopSize = math.pow(2, len(self.input))
         else:
             initPopSize = PUZZLE1_INIT_POP
 
 
-        samplingList = [0, 1] * len(self.input)
-
-        for num in self.input:
-            self.population.append(random.sample(samplingList, initPopSize))
+        for i in range(initPopSize):
+            self.population.add(self.createGene(0, 1, len(self.input), True))
 
         logging.debug("Init population %s", self.population)
 
@@ -86,23 +110,53 @@ class PuzzleOne(Puzzle):
 
     def findSolution(self):
         while True:
-            # Check timer
+            # Check timer and convergence TODO: add convergence check
             if self.timerElapsed():
                 break
 
-            # Filter out the duplicates TODO: Ask Beck about duplicates
+            # Filter out the duplicates (converges to solution slower, but creates diversity in population)
+            # TODO: check the implementation with duplicates (the list instead of set will have to be implemented for pop)
+
+            self.fitness = []
+            bestFitness = 0
 
             # Estimate fitness for each gene & return solution, if found
+            for gene in self.population:
+                fitness = self.estimateFitness(gene)
 
-            # Pick genes based on fitness
+                if fitness == self.goal:
+                    self.solution = gene
+                    return
+
+                if fitness > bestFitness:
+                    bestFitness = fitness
+                    self.solution = gene
+
+                self.fitness.append(fitness)
+
+            logging.debug("Fitness: %s", self.fitness)
+
+            # self.winners = []
+            # # Pick genes based on fitness
+            # for i in range(0,len(self.fitness),2):
+            #     self.winners.append(self.competition(self.fitness[i],self.fitness[i+1]))
+
 
             # Perform crossover
 
             # Perform mutation
 
-
     def estimateFitness(self, gene):
-        raise Exception("estimateFitness() is not implemented.")
+        sum =0
+        i = 0
+        for chromosome in gene:
+            sum+= chromosome*self.input[i]
+            i+=1
+        difference = sum-self.goal
+        if difference <= 0:
+            return sum
+        else:
+            return 1/difference
 
     def parseFile(self):
         file = open(self.filePath, "r")
