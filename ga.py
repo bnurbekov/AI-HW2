@@ -5,7 +5,8 @@ __author__ = 'Batylan Nurbekov & Ari Goodman & Doruk Uzunoglu & Miguel Mora'
 import sys, re, math, random, logging, time
 
 DEBUG = 1
-PUZZLE1_INIT_POP = 5
+PUZZLE1_INIT_POP = 50
+PUZZLE2_INIT_POP = 6
 MU = .999
 
 def getArgs():
@@ -20,11 +21,12 @@ class Puzzle(object):
     def __init__(self, filePath, secondsToWork):
         self.filePath = filePath
         self.secondsToWork = secondsToWork
-        self.population = set()
+        self.population = {}
         self.input = []
         self.goal = None
         self.executionStart = None
         self.solution = None
+        self.bestFitness = -1
 
     #Checks if the timer has elapsed
     def timerElapsed(self):
@@ -46,20 +48,16 @@ class Puzzle(object):
             return tuple(random.randint(min, max) for x in range(length)) #TODO
 
 
-    def weighted_choice(self, weights):
-        total = sum(weights)
+    def weighted_choice(self, population):
+        total = sum(weight for gene, weight in population.iteritems())
         r = random.uniform(0, total)
         upto = 0
-        index = 0
-        for w in weights:
-            if upto + w >= r:
-                return index
 
-            upto += w
-            index += 1
+        for gene, weight in population.iteritems():
+            if upto + weight >= r:
+                return gene
 
-    def competition(self, a, b):
-        return
+            upto += weight
 
     #Abstract methods:
     def run(self):
@@ -100,7 +98,9 @@ class PuzzleOne(Puzzle):
 
 
         for i in range(initPopSize):
-            self.population.add(self.createGene(0, 1, len(self.input), True))
+            self.population[self.createGene(0, 1, len(self.input), False)] = 0
+
+        self.initPopSize = len(self.population)
 
         logging.debug("Init population %s", self.population)
 
@@ -114,37 +114,54 @@ class PuzzleOne(Puzzle):
             if self.timerElapsed():
                 break
 
-            # Filter out the duplicates (converges to solution slower, but creates diversity in population)
-            # TODO: check the implementation with duplicates (the list instead of set will have to be implemented for pop)
-
-            self.fitness = []
-            bestFitness = 0
-
             # Estimate fitness for each gene & return solution, if found
             for gene in self.population:
                 fitness = self.estimateFitness(gene)
 
+                #Solution found, exit
                 if fitness == self.goal:
                     self.solution = gene
                     return
 
-                if fitness > bestFitness:
-                    bestFitness = fitness
+                #Tries to estimate the best fitness so far
+                if fitness > self.bestFitness:
+                    self.bestFitness = fitness
                     self.solution = gene
 
-                self.fitness.append(fitness)
+                self.population[gene] = fitness
 
-            logging.debug("Fitness: %s", self.fitness)
-
-            # self.winners = []
-            # # Pick genes based on fitness
-            # for i in range(0,len(self.fitness),2):
-            #     self.winners.append(self.competition(self.fitness[i],self.fitness[i+1]))
-
+            logging.debug("Population: %s", self.population)
 
             # Perform crossover
+            children = {}
 
-            # Perform mutation
+            while True:
+                if self.initPopSize < len(children) + 2:
+                    break
+
+                parent1 = self.weighted_choice(self.population)
+                parent2 = self.weighted_choice(self.population)
+
+                #generate cut-off (split)
+                split = random.randint(1, len(parent1)-1)
+                child1 = parent1[0:split] + parent2[split:len(parent1)]
+                child2 = parent2[0:split] + parent1[split:len(parent1)]
+
+                # Perform mutation
+                if random.uniform(0, 1) < 0.05:
+                    child1lst = list(child1)
+                    child1lst[random.randint(0, len(child1lst)-1)] ^= 1
+                    child1 = tuple(child1lst)
+
+                if random.uniform(0, 1) < 0.05:
+                    child2lst = list(child2)
+                    child2lst[random.randint(0, len(child2lst)-1)] ^= 1
+                    child2 = tuple(child2lst)
+
+                children[child1] = 0
+                children[child2] = 0
+
+            self.population = children
 
     def estimateFitness(self, gene):
         sum =0
@@ -178,10 +195,38 @@ class PuzzleOne(Puzzle):
 
 class PuzzleTwo(Puzzle):
     def run(self):
+        logging.debug("Running puzzle two...")
+
+        self.parseFile()
+
+        #if the number you are paying with is bigger than the number of possible states, use the number of possible states
+        if PUZZLE2_INIT_POP > math.pow(2, len(self.input)):
+            initPopSize = math.pow(2, len(self.input))
+        else:
+            initPopSize = PUZZLE2_INIT_POP
+
+        for i in range(initPopSize):
+            self.population.add(self.createGene(0, 2, len(self.input), 2))
+
+        logging.debug("Init population %s", self.population)
+
+        self.findSolution()
+
+        logging.debug("Solution %s", self.solution)
         return
 
     def parseFile(self):
-        return
+        file = open(self.filePath, "r")
+        rows = file.readlines()
+
+        self.input = []
+        count = 0
+
+        for row in rows:
+            chars = filter(None, re.split('\t|\s|\n|\v|\r', row))
+            num = int(chars[0])
+	    self.input.append(num)
+            count += 1
 
 class PuzzleThree(Puzzle):
     def run(self):
