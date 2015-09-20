@@ -5,7 +5,7 @@ __author__ = 'Batylan Nurbekov & Ari Goodman & Doruk Uzunoglu & Miguel Mora'
 import sys, re, math, random, logging, time
 
 DEBUG = 1
-PUZZLE1_INIT_POP = 50
+PUZZLE1_INIT_POP = 10
 PUZZLE2_INIT_POP = 6
 PUZZLE3_INIT_POP = 3
 MU = .999
@@ -98,19 +98,14 @@ class Puzzle(object):
         file = open(self.filePath, "r")
         rows = file.readlines()
 
-        self.input = []
-        count = 0
+        data = []
 
         for row in rows:
             str_list = filter(None, re.split('\t|\s|\n|\v|\r', row))
             representation = self.getInputRepresentation(str_list)
+            data.append(representation)
 
-            if count == 0:
-                self.goal = representation
-            else:
-                self.input.append(representation)
-
-            count += 1
+        self.processData(data)
 
     def printStats(self):
         print "Solution: " + self.convertRepresentationToString(self.solution)
@@ -118,24 +113,43 @@ class Puzzle(object):
         print "Generations the algorithm ran for: %d" % self.generationNum
         print "Generation when solution was found: %d" % self.generationWhenSolutionFound
 
+    # Processes the input representation data extracted from file
+    def processData(self, data):
+        raise Exception("processData() is not implemented.")
+
+    # Converts input string list into representation of an input used in the puzzle
     def getInputRepresentation(self, str_list):
         raise Exception("getInputRepresenation() is not implemented.")
 
+    # Creates gene
     def createGene(self):
         raise Exception("createGene() is not implemented.")
 
+    # Finds solution for the puzzle
     def findSolution(self):
         raise Exception("findSolution() is not implemented.")
 
+    # Repairs a gene to conform the constraints of the puzzle
+    def repair(self, gene_lst):
+        raise Exception("repair() is not implemented.")
+
+    # Mutates a gene
+    def mutate(self, gene_lst):
+        raise Exception("mutate() is not implemented.")
+
+    # Estimates fitness of a gene
     def estimateFitness(self, gene):
         raise Exception("estimateFitness() is not implemented.")
 
+    # Gets maximum population size
     def getMaxPopSize(self):
-        raise Exception("getMaxPopSize() is not implemented.")
+        return int(math.pow(2, len(self.input)))
 
+    # Gets initial population size
     def getInitPopSize(self):
         raise Exception("getInitPopSize() is not implemented.")
 
+    # Converts internal input representation defined by the gene to a string
     def convertRepresentationToString(self, gene):
         raise Exception("convertRepresentationToString() is not implemented.")
 
@@ -146,11 +160,12 @@ class PuzzleOne(Puzzle):
     def getInputRepresentation(self, str_list):
         return int(str_list[0])
 
+    def processData(self, data):
+        self.goal = data[0]
+        self.input = data[1:len(data)]
+
     def createGene(self):
         return tuple(random.randint(0, 1) for x in range(len(self.input)))
-
-    def getMaxPopSize(self):
-        return int(math.pow(2, len(self.input)))
 
     def getInitPopSize(self):
         return PUZZLE1_INIT_POP
@@ -182,7 +197,6 @@ class PuzzleOne(Puzzle):
 
             logging.debug("Population: %s", self.population)
 
-            # Perform crossover
             children = {}
 
             while True:
@@ -194,24 +208,33 @@ class PuzzleOne(Puzzle):
 
                 #generate cut-off (split)
                 split = random.randint(1, len(parent1)-1)
-                child1 = parent1[0:split] + parent2[split:len(parent1)]
-                child2 = parent2[0:split] + parent1[split:len(parent1)]
+
+                # Perform crossover
+                child1_lst = list(parent1[0:split] + parent2[split:len(parent1)])
+                child2_lst = list(parent2[0:split] + parent1[split:len(parent1)])
+
+                # Repair invalid genes (only applicable to Puzzle 2)
+                self.repair(child1_lst)
+                self.repair(child2_lst)
 
                 # Perform mutation
-                if random.uniform(0, 1) < 0.05:
-                    child1lst = list(child1)
-                    child1lst[random.randint(0, len(child1lst)-1)] ^= 1
-                    child1 = tuple(child1lst)
+                self.mutate(child1_lst)
+                self.mutate(child2_lst)
 
-                if random.uniform(0, 1) < 0.05:
-                    child2lst = list(child2)
-                    child2lst[random.randint(0, len(child2lst)-1)] ^= 1
-                    child2 = tuple(child2lst)
-
-                children[child1] = 0
-                children[child2] = 0
+                children[tuple(child1_lst)] = 0
+                children[tuple(child2_lst)] = 0
 
             self.population = children
+
+    def repair(self, gene_lst):
+        #No need to repair genes for this puzzle
+        return
+
+    def mutate(self, gene_lst):
+        if random.uniform(0, 1) < 0.05:
+            gene_lst[random.randint(0, len(gene_lst)-1)] ^= 1
+
+        return gene_lst
 
     def estimateFitness(self, gene):
         sum = 0
@@ -243,13 +266,17 @@ class PuzzleTwo(Puzzle):
     def createGene(self):
         return
 
-    def getMaxPopSize(self):
-        return
-
     def getInitPopSize(self):
-        return
+        return PUZZLE2_INIT_POP
 
     def findSolution(self):
+        return
+
+    def repair(self, gene_lst):
+        #No need to repair genes for this puzzle
+        return
+
+    def mutate(self, gene_lst):
         return
 
     def estimateFitness(self, gene):
@@ -266,9 +293,6 @@ class PuzzleThree(Puzzle):
         return
 
     def createGene(self):
-        return
-
-    def getMaxPopSize(self):
         return
 
     def getInitPopSize(self):
