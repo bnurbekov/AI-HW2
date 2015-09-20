@@ -8,7 +8,6 @@ DEBUG = 1
 PUZZLE1_INIT_POP = 10
 PUZZLE2_INIT_POP = 6
 PUZZLE3_INIT_POP = 3
-MU = .999
 
 def getArgs():
     validArgNum = len(sys.argv) == 4
@@ -153,9 +152,12 @@ class Puzzle(object):
         data = []
 
         for row in rows:
-            str_list = filter(None, re.split('\t|\s|\n|\v|\r', row))
-            representation = self.getInputRepresentation(str_list)
-            data.append(representation)
+            str_list = filter(None, re.split('\t|\s|\n|\v|\r|,', row))
+
+            #create representation only if row contains alphanumeric characters
+            if str_list:
+                representation = self.getInputRepresentation(str_list)
+                data.append(representation)
 
         self.processData(data)
 
@@ -373,30 +375,48 @@ class PuzzleTwo(Puzzle):
         return False
 
 class PuzzleThree(Puzzle):
-    def getInputRepresentation(self, string):
-        return
+    def getInputRepresentation(self, str_list):
+        return [int(str_list[i]) if i > 0 else str_list[i] for i in range(len(str_list))]
 
-    def createGene(self):
-        return
+    def processData(self, data):
+        self.input = data
 
     def getInitPopSize(self):
         return PUZZLE3_INIT_POP
 
+    def createGene(self):
+        gene = []
+        # for x in range(length)
+        #  	gene.append(tuple(random.randint(min, max), random.randint(0,1)))
+        #  	max -= 1
+        # return tuple(gene)
+
     def repair(self, gene_lst):
-        #No need to repair genes for this puzzle
         return
 
     def mutate(self, gene_lst):
         return
 
     def estimateFitness(self, gene):
-        return
+        return self.getScore(gene)
 
     def convertRepresentationToString(self, gene):
         return
 
     def getScore(self, gene):
-        return
+        score = 0
+
+        if self.isLegal(gene):
+            height = self.getHeight(gene)
+            score = 10 + math.pow(height,2) - self.getCost(gene)
+
+        return score
+
+    def isLegal(self, gene):
+        return True
+
+    def getHeight(self, gene):
+        sum([1 if chromosome != -1 else 0 for chromosome in gene])
 
     def converged(self):
         return False
