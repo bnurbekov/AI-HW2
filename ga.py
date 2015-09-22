@@ -6,8 +6,8 @@ import sys, re, math, random, logging, time
 
 DEBUG = 1
 PUZZLE1_INIT_POP = 10
-PUZZLE2_INIT_POP = 6
-PUZZLE3_INIT_POP = 3
+PUZZLE2_INIT_POP = 10
+PUZZLE3_INIT_POP = 10
 
 def getArgs():
     validArgNum = len(sys.argv) == 4
@@ -269,7 +269,7 @@ class PuzzleTwo(Puzzle):
         available_bins = {0: 0, 1: 0, 2: 0}
         gene = []
 
-        for i in range(len(self.input)):
+        for i in range(len(self.input)/3):
             bin_index = random.choice(available_bins.keys())
             gene.append(bin_index)
             available_bins[bin_index] += 1
@@ -386,22 +386,42 @@ class PuzzleThree(Puzzle):
 
     def createGene(self):
         gene = []
-        # for x in range(length)
-        #  	gene.append(tuple(random.randint(min, max), random.randint(0,1)))
-        #  	max -= 1
-        # return tuple(gene)
+        max = len(self.input) - 1
+        for x in range(len(self.input)):
+            if random.randint(0,1):
+                gene.append(random.randint(0, max))
+            else:
+                gene.append(-1)
+
+            max -= 1
+
+        return tuple(gene)
 
     def repair(self, gene_lst):
+        #No need to repair a gene for this puzzle
         return
 
     def mutate(self, gene_lst):
-        return
+        if random.uniform(0, 1) < 0.05:
+            #Select index of chromosome to mutate
+            chr_i = random.randint(0, len(gene_lst)-1)
+
+            #Select random
+            max = (len(gene_lst) - 1) - chr_i
+            new_val = random.choice(range(-1, max, 1))
+
+            #Mutate chromosome
+            gene_lst[chr_i] = new_val
 
     def estimateFitness(self, gene):
         return self.getScore(gene)
 
+    def converged(self):
+        return False
+
     def convertRepresentationToString(self, gene):
-        return
+        tower = self.reconstructTower(gene)
+        return '\n'.join([str(piece) for piece in tower])
 
     def getScore(self, gene):
         score = 0
@@ -413,13 +433,67 @@ class PuzzleThree(Puzzle):
         return score
 
     def isLegal(self, gene):
+        tower = self.reconstructTower(gene)
+        towerLen = len(tower)
+
+        #Towers with no pieces are not allowed
+        if towerLen == 0:
+            return False
+
+        #Check that there is a door on the bottom and look out at the top
+        if tower[0][0] != "Door" or tower[towerLen-1][0] != "Lookout":
+            return False
+
+        previous_piece = None
+        for i in range(towerLen):
+            piece = tower[i]
+
+            #Check that each consecutive piece width is always larger
+            if previous_piece is not None:
+                if piece[1] > previous_piece[1]:
+                    return False
+
+            #Check that all the pieces in the middle of the tower are walls
+            if i != 0 or i != towerLen-1:
+                if piece[0] != "Wall":
+                    return False
+
+            #Check that each piece can support pieces above it
+            if piece[2] < towerLen-1-i:
+                return False
+
+            previous_piece = piece
+
+
         return True
+
+    def reconstructTower(self, gene):
+        towerLen = len(gene)
+        tower = [None]*towerLen
+
+        block_i = 0
+        for chromosome in gene:
+            if chromosome == -1: #Skip pieces that are not in the tower
+                continue
+
+            j = 0
+            for i in range(len(tower)):
+                if tower[i] is None:
+                    if j == chromosome:
+                        tower[i] = self.input[block_i]
+                        break
+
+                    j += 1
+
+            block_i += 1
+
+        return filter(None, tower)
+
+    def getCost(self, gene):
+        sum([self.input[i][3] if gene[i] != -1 else 0 for i in range(len(gene))])
 
     def getHeight(self, gene):
         sum([1 if chromosome != -1 else 0 for chromosome in gene])
-
-    def converged(self):
-        return False
 
 if __name__ == "__main__":
     (puzzleNum, filePath, secs) = getArgs()
