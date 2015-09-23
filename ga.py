@@ -4,7 +4,7 @@ __author__ = 'Batylan Nurbekov & Ari Goodman & Doruk Uzunoglu & Miguel Mora'
 
 import sys, re, math, random, logging, time
 
-DEBUG = 1
+LOGGING_LEVEL = logging.DEBUG
 PUZZLE1_INIT_POP = 10
 PUZZLE2_INIT_POP = 10
 PUZZLE3_INIT_POP = 10
@@ -291,7 +291,14 @@ class PuzzleTwo(Puzzle):
         return PUZZLE2_INIT_POP
 
     def crossover(self, parent1, parent2):
-        return
+        #generate cut-off (split)
+        split = random.randint(1, len(parent1)-1)
+
+        # Perform crossover
+        child1_lst = list(parent1[0:split] + parent2[split:len(parent1)])
+        child2_lst = list(parent2[0:split] + parent1[split:len(parent1)])
+
+        return (child1_lst, child2_lst)
 
     def repair(self, gene_lst):
         bins = {0:[], 1:[], 2:[]}
@@ -317,7 +324,7 @@ class PuzzleTwo(Puzzle):
                 bins[bin_i] = []
 
     def mutate(self, gene_lst):
-        if random.uniform(0, 1) < 0.05:
+        if random.uniform(0, 1) < 0.3:
             available_bins = [0, 1, 2]
 
             #Select a bin randomly
@@ -458,7 +465,6 @@ class PuzzleThree(Puzzle):
                     else:
                         gene_lst[i] = replacement
 
-
     # Randomly chooses
     @staticmethod
     def choose_and_remove(list):
@@ -536,7 +542,7 @@ class PuzzleThree(Puzzle):
 if __name__ == "__main__":
     (puzzleNum, filePath, secs) = getArgs()
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=LOGGING_LEVEL)
 
     puzzle = PuzzleFactory.initPuzzle(puzzleNum, filePath, secs)
     puzzle.run()
