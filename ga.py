@@ -100,12 +100,7 @@ class Puzzle(object):
                 parent1 = self.weighted_choice(self.population)
                 parent2 = self.weighted_choice(self.population)
 
-                #generate cut-off (split)
-                split = random.randint(1, len(parent1)-1)
-
-                # Perform crossover
-                child1_lst = list(parent1[0:split] + parent2[split:len(parent1)])
-                child2_lst = list(parent2[0:split] + parent1[split:len(parent1)])
+                (child1_lst, child2_lst) = self.crossover(parent1, parent2)
 
                 # Repair invalid genes (only applicable to Puzzle 2)
                 self.repair(child1_lst)
@@ -180,6 +175,10 @@ class Puzzle(object):
     def createGene(self):
         raise Exception("createGene() is not implemented.")
 
+    # Crossovers two parents
+    def crossover(self, parent1, parent2):
+        raise Exception("crossover() is not implemented.")
+
     # Repairs a gene to conform the constraints of the puzzle
     def repair(self, gene_lst):
         raise Exception("repair() is not implemented.")
@@ -227,6 +226,16 @@ class PuzzleOne(Puzzle):
     def converged(self):
         return self.bestFitness == self.goal
 
+    def crossover(self, parent1, parent2):
+        #generate cut-off (split)
+        split = random.randint(1, len(parent1)-1)
+
+        # Perform crossover
+        child1_lst = list(parent1[0:split] + parent2[split:len(parent1)])
+        child2_lst = list(parent2[0:split] + parent1[split:len(parent1)])
+
+        return (child1_lst, child2_lst)
+
     def repair(self, gene_lst):
         #No need to repair genes for this puzzle
         return
@@ -269,7 +278,7 @@ class PuzzleTwo(Puzzle):
         available_bins = {0: 0, 1: 0, 2: 0}
         gene = []
 
-        for i in range(len(self.input)/3):
+        for i in range(len(self.input)):
             bin_index = random.choice(available_bins.keys())
             gene.append(bin_index)
             available_bins[bin_index] += 1
@@ -280,6 +289,9 @@ class PuzzleTwo(Puzzle):
 
     def getInitPopSize(self):
         return PUZZLE2_INIT_POP
+
+    def crossover(self, parent1, parent2):
+        return
 
     def repair(self, gene_lst):
         bins = {0:[], 1:[], 2:[]}
@@ -379,121 +391,147 @@ class PuzzleThree(Puzzle):
         return [int(str_list[i]) if i > 0 else str_list[i] for i in range(len(str_list))]
 
     def processData(self, data):
+        if (len(data) < 2):
+            raise Exception("The input should contain at least two pieces for the tower.")
+
         self.input = data
 
     def getInitPopSize(self):
         return PUZZLE3_INIT_POP
 
     def createGene(self):
-        gene = []
-        max = len(self.input) - 1
-        for x in range(len(self.input)):
-            if random.randint(0,1):
-                gene.append(random.randint(0, max))
-            else:
-                gene.append(-1)
+        gene_len = random.randint(2, len(self.input))
+        available_pieces = range(len(self.input))
 
-            max -= 1
+        gene = []
+
+        for i in range(gene_len):
+            chrom = PuzzleThree.choose_and_remove(available_pieces)
+            gene.append(chrom)
 
         return tuple(gene)
 
+    def crossover(self, parent1, parent2):
+        #generate cut-off (split)
+        split = random.randint(1, min(len(parent1), len(parent2))-1)
+
+        # Perform crossover
+        child1_lst = list(parent1[0:split] + parent2[split:len(parent2)])
+        child2_lst = list(parent2[0:split] + parent1[split:len(parent1)])
+
+        return (child1_lst, child2_lst)
+
     def repair(self, gene_lst):
-        #No need to repair a gene for this puzzle
-        return
+        duplicate_dict = {}
+
+        for i in range(len(gene_lst)):
+            chromosome = gene_lst[i]
+            if duplicate_dict.has_key(chromosome):
+                duplicate_dict[chromosome].append(i)
+            else:
+                duplicate_dict[chromosome] = [i]
+
+        unused_elements = [i for i in range(len(self.input)) if not duplicate_dict.has_key(i)]
+
+        for index_list in duplicate_dict.itervalues():
+            if len(index_list) > 1:
+                index = random.choice(index_list)
+                replacement = PuzzleThree.choose_and_remove(unused_elements)
+                gene_lst[index] = replacement
 
     def mutate(self, gene_lst):
-        if random.uniform(0, 1) < 0.05:
-            #Select index of chromosome to mutate
-            chr_i = random.randint(0, len(gene_lst)-1)
+        for i in range(len(self.input)):
+            if random.uniform(0, 1) < 0.3:
+                if i >= len(gene_lst):
+                    unused_elements = [j for j in range(0, len(self.input)) if j not in gene_lst]
+                    replacement = PuzzleThree.choose_and_remove(unused_elements)
+                    gene_lst.append(replacement)
+                elif len(gene_lst) <= 2:
+                    unused_elements = [j for j in range(0, len(self.input)) if j not in gene_lst]
+                    replacement = PuzzleThree.choose_and_remove(unused_elements)
+                    gene_lst[i] = replacement
+                else:
+                    unused_elements = [j for j in range(-1, len(self.input)) if j not in gene_lst]
+                    replacement = PuzzleThree.choose_and_remove(unused_elements)
+                    if replacement == -1:
+                        gene_lst.pop(i)
+                    else:
+                        gene_lst[i] = replacement
 
-            #Select random
-            max = (len(gene_lst) - 1) - chr_i
-            new_val = random.choice(range(-1, max, 1))
 
-            #Mutate chromosome
-            gene_lst[chr_i] = new_val
+    # Randomly chooses
+    @staticmethod
+    def choose_and_remove(list):
+        if list:
+            i = random.randrange(len(list))
+            return list.pop(i)
+        else:
+            raise Exception("choose_and_remove(): list is empty")
 
     def estimateFitness(self, gene):
-        return self.getScore(gene)
+        (score, legalityScore) = self.getScoreTuple(gene)
+
+        if score < 0:
+            return 1/math.abs(score) * legalityScore
+        else:
+            return score + legalityScore
 
     def converged(self):
         return False
 
     def convertRepresentationToString(self, gene):
-        tower = self.reconstructTower(gene)
-        return '\n'.join([str(piece) for piece in tower])
+        return "\n".join([str(self.input[i]) for i in range(len(gene))])
 
     def getScore(self, gene):
+        return self.getScoreTuple(gene)[0]
+
+    def getScoreTuple(self, gene):
         score = 0
+        legalityScore = self.getLegalityPoints(gene)
 
-        if self.isLegal(gene):
-            height = self.getHeight(gene)
-            score = 10 + math.pow(height,2) - self.getCost(gene)
+        isLegal = self.getLegalityPoints(gene) == 1
 
-        return score
+        if isLegal:
+            score = 10 + math.pow(len(gene),2) - self.getCost(gene)
 
-    def isLegal(self, gene):
-        tower = self.reconstructTower(gene)
-        towerLen = len(tower)
+        return (score, legalityScore)
 
-        #Towers with no pieces are not allowed
-        if towerLen == 0:
-            return False
+    def getLegalityPoints(self, gene):
+        legality_recip = 1
 
+        towerLen = len(gene)
         #Check that there is a door on the bottom and look out at the top
-        if tower[0][0] != "Door" or tower[towerLen-1][0] != "Lookout":
-            return False
+        if self.input[gene[0]][0] != "Door":
+            legality_recip += 100
+
+        if self.input[gene[towerLen - 1]][0] != "Lookout":
+            legality_recip += 100
 
         previous_piece = None
         for i in range(towerLen):
-            piece = tower[i]
+            piece = self.input[gene[i]]
 
             #Check that each consecutive piece width is always larger
             if previous_piece is not None:
                 if piece[1] > previous_piece[1]:
-                    return False
+                    legality_recip += 1
 
             #Check that all the pieces in the middle of the tower are walls
-            if i != 0 or i != towerLen-1:
+            if i != 0 and i != towerLen - 1:
                 if piece[0] != "Wall":
-                    return False
+                    legality_recip += 50
 
             #Check that each piece can support pieces above it
             if piece[2] < towerLen-1-i:
-                return False
+                legality_recip += 1
 
             previous_piece = piece
 
 
-        return True
-
-    def reconstructTower(self, gene):
-        towerLen = len(gene)
-        tower = [None]*towerLen
-
-        block_i = 0
-        for chromosome in gene:
-            if chromosome == -1: #Skip pieces that are not in the tower
-                continue
-
-            j = 0
-            for i in range(len(tower)):
-                if tower[i] is None:
-                    if j == chromosome:
-                        tower[i] = self.input[block_i]
-                        break
-
-                    j += 1
-
-            block_i += 1
-
-        return filter(None, tower)
+        return 1.0/legality_recip
 
     def getCost(self, gene):
-        sum([self.input[i][3] if gene[i] != -1 else 0 for i in range(len(gene))])
-
-    def getHeight(self, gene):
-        sum([1 if chromosome != -1 else 0 for chromosome in gene])
+        return sum([self.input[gene[i]][3] for i in range(len(gene))])
 
 if __name__ == "__main__":
     (puzzleNum, filePath, secs) = getArgs()
