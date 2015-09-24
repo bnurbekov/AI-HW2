@@ -3,6 +3,7 @@
 __author__ = 'Batylan Nurbekov & Ari Goodman & Doruk Uzunoglu & Miguel Mora'
 
 import sys, re, math, random, logging, time
+from operator import mul
 
 LOGGING_LEVEL = logging.DEBUG
 PUZZLE1_INIT_POP = 10
@@ -209,6 +210,15 @@ class Puzzle(object):
     def converged(self):
         raise Exception("converged() is not implemented.")
 
+    # Randomly chooses an element from the list, removes and returns it
+    @staticmethod
+    def choose_and_remove(list):
+        if list:
+            i = random.randrange(len(list))
+            return list.pop(i)
+        else:
+            raise Exception("choose_and_remove(): list is empty")
+
 class PuzzleOne(Puzzle):
     def getInputRepresentation(self, str_list):
         return float(str_list[0])
@@ -324,43 +334,36 @@ class PuzzleTwo(Puzzle):
                 bins[bin_i] = []
 
     def mutate(self, gene_lst):
-        if random.uniform(0, 1) < 0.3:
-            available_bins = [0, 1, 2]
+        for i in range(len(gene_lst)):
+            bin_i = gene_lst[i]
+            if random.uniform(0, 1) < 0.01:
+                available_bins = [0, 1, 2]
 
-            #Select a bin randomly
-            firstBin = random.choice(available_bins)
-            available_bins.remove(firstBin)
+                #Select a bin randomly
+                firstBin = bin_i
+                available_bins.remove(firstBin)
 
-            #Select a random number in that bin
-            a = len(self.input)/3 - 1
-            index_in_bin1 = random.randint(0, len(self.input)/3 - 1)
-            count = 0
-            for i in range(len(gene_lst)):
-                if gene_lst[i] == firstBin:
-                    if count == index_in_bin1:
-                        index_in_gene1 = i
-                        break
+                #Select a random number in that bin
+                index_in_gene1 = i
 
-                    count += 1
+                #Select another bin randomly
+                secondBin = random.choice(available_bins)
 
-            #Select another bin randomly
-            secondBin = random.choice(available_bins)
+                #Select a random number in that bin
+                index_in_bin2 = random.randint(0, len(self.input)/3 - 1)
+                count = 0
+                for i in range(len(gene_lst)):
+                    if gene_lst[i] == secondBin:
+                        if count == index_in_bin2:
+                            index_in_gene2 = i
+                            break
 
-            #Select a random number in that bin
-            index_in_bin2 = random.randint(0, len(self.input)/3 - 1)
-            count = 0
-            for i in range(len(gene_lst)):
-                if gene_lst[i] == secondBin:
-                    if count == index_in_bin2:
-                        index_in_gene2 = i
-                        break
+                        count += 1
 
-                    count += 1
-
-            #Switch the two random numbers found
-            temp = gene_lst[index_in_gene1]
-            gene_lst[index_in_gene1] = gene_lst[index_in_gene2]
-            gene_lst[index_in_gene2] = temp
+                #Switch the two random numbers found
+                temp = gene_lst[index_in_gene1]
+                gene_lst[index_in_gene1] = gene_lst[index_in_gene2]
+                gene_lst[index_in_gene2] = temp
 
     def estimateFitness(self, gene):
         score = self.getScore(gene)
@@ -377,18 +380,19 @@ class PuzzleTwo(Puzzle):
 
     def getScore(self, gene):
         product = 1
-        sum = 0
+        summation = 0
 
         i = 0
         for chromosome in gene:
             if chromosome == 0:
                 product *= self.input[i]
+
             elif chromosome == 1:
-                sum += self.input[i]
+                summation += self.input[i]
 
             i += 1
 
-        return (product + sum) / 2
+        return (product + summation) / 2
 
     def converged(self):
         return False
@@ -413,7 +417,7 @@ class PuzzleThree(Puzzle):
         gene = []
 
         for i in range(gene_len):
-            chrom = PuzzleThree.choose_and_remove(available_pieces)
+            chrom = Puzzle.choose_and_remove(available_pieces)
             gene.append(chrom)
 
         return tuple(gene)
@@ -441,9 +445,9 @@ class PuzzleThree(Puzzle):
         unused_elements = [i for i in range(len(self.input)) if not duplicate_dict.has_key(i)]
 
         for index_list in duplicate_dict.itervalues():
-            if len(index_list) > 1:
-                index = random.choice(index_list)
-                replacement = PuzzleThree.choose_and_remove(unused_elements)
+            while len(index_list) > 1:
+                index = Puzzle.choose_and_remove(index_list)
+                replacement = Puzzle.choose_and_remove(unused_elements)
                 gene_lst[index] = replacement
 
     def mutate(self, gene_lst):
@@ -451,28 +455,19 @@ class PuzzleThree(Puzzle):
             if random.uniform(0, 1) < 0.3:
                 if i >= len(gene_lst):
                     unused_elements = [j for j in range(0, len(self.input)) if j not in gene_lst]
-                    replacement = PuzzleThree.choose_and_remove(unused_elements)
+                    replacement = Puzzle.choose_and_remove(unused_elements)
                     gene_lst.append(replacement)
                 elif len(gene_lst) <= 2:
                     unused_elements = [j for j in range(0, len(self.input)) if j not in gene_lst]
-                    replacement = PuzzleThree.choose_and_remove(unused_elements)
+                    replacement = Puzzle.choose_and_remove(unused_elements)
                     gene_lst[i] = replacement
                 else:
                     unused_elements = [j for j in range(-1, len(self.input)) if j not in gene_lst]
-                    replacement = PuzzleThree.choose_and_remove(unused_elements)
+                    replacement = Puzzle.choose_and_remove(unused_elements)
                     if replacement == -1:
                         gene_lst.pop(i)
                     else:
                         gene_lst[i] = replacement
-
-    # Randomly chooses
-    @staticmethod
-    def choose_and_remove(list):
-        if list:
-            i = random.randrange(len(list))
-            return list.pop(i)
-        else:
-            raise Exception("choose_and_remove(): list is empty")
 
     def estimateFitness(self, gene):
         (score, legalityScore) = self.getScoreTuple(gene)
