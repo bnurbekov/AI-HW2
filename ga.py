@@ -2,13 +2,15 @@
 
 __author__ = 'Batylan Nurbekov & Ari Goodman & Doruk Uzunoglu & Miguel Mora'
 
-import sys, re, math, random, logging, time
-from operator import mul
+import sys, re, math, random, logging, time, csv, os
 
-LOGGING_LEVEL = logging.DEBUG
+LOGGING_LEVEL = logging.ERROR
+CULLING = True
+ELITISM = True
 PUZZLE1_INIT_POP = 10
 PUZZLE2_INIT_POP = 10
 PUZZLE3_INIT_POP = 10
+
 
 def getArgs():
     validArgNum = len(sys.argv) == 4
@@ -17,6 +19,7 @@ def getArgs():
         raise Exception("The number of arguments should be 3")
 
     return (int(sys.argv[1]), sys.argv[2], int(sys.argv[3]))
+
 
 class PuzzleFactory:
     @staticmethod
@@ -30,6 +33,7 @@ class PuzzleFactory:
         else:
             return None
 
+
 class Puzzle(object):
     def __init__(self, filePath, secondsToWork):
         self.filePath = filePath
@@ -39,20 +43,26 @@ class Puzzle(object):
         self.goal = None
         self.executionStart = None
         self.solution = None
+        self.worstSolution = None
+        self.medianSolution = None
         self.bestFitness = -1
+        self.worstFitness = 9e9
+        self.solutions = []
 
-        #Stat variables
+        # Stat variables
         self.generationNum = 0
         self.generationWhenSolutionFound = 0
 
-    #Runs puzzle
+        self.outputToGraph = []
+
+    # Runs puzzle
     def run(self):
         self.parseFile()
 
         initPopSize = self.getInitPopSize()
         maxPopSize = self.getMaxPopSize()
 
-        #if the number you are paying with is bigger than the number of possible states, use the number of possible states
+        # if the number you are paying with is bigger than the number of possible states, use the number of possible states
         if initPopSize > maxPopSize:
             initPopSize = maxPopSize
 
@@ -69,31 +79,68 @@ class Puzzle(object):
 
         self.printStats()
 
+        self.writeDataToCSVFile()
+
+    def writeDataToCSVFile(self):
+        if not os.path.exists("output"):
+            os.makedirs("output")
+
+        # Open the textfile where the output will be written to
+        with open("output/elitism=" + str(ELITISM) + "_culling=" + str(CULLING) + "_puzzle=" + str(puzzleNum) + ".csv", "wb") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(["Index", "Max", "Median", "Min"])
+            csv_writer.writerows(self.outputToGraph)
+
     def findSolution(self):
+        i = 0
+
         while True:
             # Check timer and convergence (including if solution is found)
             if self.timerElapsed() or self.converged():
                 break
 
-            #Update stats
+            # Update stats
             self.generationNum += 1
+            i += 1
+
+            fitnessToGeneListDict = {}
+            fitnessList = []
 
             # Estimate fitness for each gene
             for gene in self.population:
                 fitness = self.estimateFitness(gene)
 
-                #Tries to estimate the best fitness so far
+                fitnessList.append(fitness)
+
+                if fitness not in fitnessToGeneListDict:
+                    fitnessToGeneListDict[fitness] = [gene]
+                else:
+                    tempList = fitnessToGeneListDict[fitness]
+                    tempList.append(gene)
+                    fitnessToGeneListDict[fitness] = tempList
+
+                # Tries to estimate the best fitness so far
                 if fitness > self.bestFitness:
                     self.solution = gene
                     self.generationWhenSolutionFound = self.generationNum
                     self.bestFitness = fitness
 
+                # Tries to estimate the worst fitness and solution so far
+                if fitness < self.worstFitness:
+                    self.worstSolution = gene
+                    self.worstFitness = fitness
+
                 self.population[gene] = fitness
+
+            fitnessList.sort()
+
+            if CULLING and len(fitnessToGeneListDict) > 1:
+                for item in fitnessToGeneListDict[fitnessList[0]]:
+                    del self.population[item]
 
             logging.debug("Population: %s", self.population)
 
             children = {}
-
             while True:
                 if self.initPopSize < len(children) + 2:
                     break
@@ -114,9 +161,18 @@ class Puzzle(object):
                 children[tuple(child1_lst)] = 0
                 children[tuple(child2_lst)] = 0
 
+            if ELITISM:
+                for item in fitnessToGeneListDict[fitnessList[len(fitnessList) - 1]]:
+                    children[item] = 0
+
             self.population = children
 
-    #Checks if the timer has elapsed
+            if i >= 10:
+                i = 0
+                self.outputToGraph.append(
+                    (self.generationNum, fitnessList[(len(fitnessList)) - 1], fitnessList[(len(fitnessList)) / 2], fitnessList[0]))
+
+    # Checks if the timer has elapsed
     def timerElapsed(self):
         elapsed = False
 
@@ -128,7 +184,7 @@ class Puzzle(object):
 
         return elapsed
 
-    #Picks a sample from the population with
+    # Picks a sample from the population with
     def weighted_choice(self, population):
         total = sum(weight for gene, weight in population.iteritems())
         r = random.uniform(0, total)
@@ -140,7 +196,7 @@ class Puzzle(object):
 
             upto += weight
 
-    #Parses file to extract input and goal representations
+    # Parses file to extract input and goal representations
     def parseFile(self):
         file = open(self.filePath, "r")
         rows = file.readlines()
@@ -150,7 +206,7 @@ class Puzzle(object):
         for row in rows:
             str_list = filter(None, re.split('\t|\s|\n|\v|\r|,', row))
 
-            #create representation only if row contains alphanumeric characters
+            # create representation only if row contains alphanumeric characters
             if str_list:
                 representation = self.getInputRepresentation(str_list)
                 data.append(representation)
@@ -219,6 +275,7 @@ class Puzzle(object):
         else:
             raise Exception("choose_and_remove(): list is empty")
 
+
 class PuzzleOne(Puzzle):
     def getInputRepresentation(self, str_list):
         return float(str_list[0])
@@ -237,8 +294,8 @@ class PuzzleOne(Puzzle):
         return self.bestFitness == self.goal
 
     def crossover(self, parent1, parent2):
-        #generate cut-off (split)
-        split = random.randint(1, len(parent1)-1)
+        # generate cut-off (split)
+        split = random.randint(1, len(parent1) - 1)
 
         # Perform crossover
         child1_lst = list(parent1[0:split] + parent2[split:len(parent1)])
@@ -247,12 +304,12 @@ class PuzzleOne(Puzzle):
         return (child1_lst, child2_lst)
 
     def repair(self, gene_lst):
-        #No need to repair genes for this puzzle
+        # No need to repair genes for this puzzle
         return
 
     def mutate(self, gene_lst):
         if random.uniform(0, 1) < 0.05:
-            gene_lst[random.randint(0, len(gene_lst)-1)] ^= 1
+            gene_lst[random.randint(0, len(gene_lst) - 1)] ^= 1
 
     def estimateFitness(self, gene):
         sum = 0
@@ -267,7 +324,7 @@ class PuzzleOne(Puzzle):
         if difference <= 0:
             return sum
         else:
-            return 1/difference
+            return 1 / difference
 
     def convertRepresentationToString(self, gene):
         return ' '.join([str(self.input[i]) for i in range(len(gene)) if gene[i]])
@@ -276,6 +333,7 @@ class PuzzleOne(Puzzle):
         score = sum([self.input[i] for i in range(len(gene)) if gene[i]])
 
         return score if score <= self.goal else 0
+
 
 class PuzzleTwo(Puzzle):
     def getInputRepresentation(self, str_list):
@@ -292,7 +350,7 @@ class PuzzleTwo(Puzzle):
             bin_index = random.choice(available_bins.keys())
             gene.append(bin_index)
             available_bins[bin_index] += 1
-            if available_bins[bin_index] >= len(self.input)/3:
+            if available_bins[bin_index] >= len(self.input) / 3:
                 del available_bins[bin_index]
 
         return tuple(gene)
@@ -301,8 +359,8 @@ class PuzzleTwo(Puzzle):
         return PUZZLE2_INIT_POP
 
     def crossover(self, parent1, parent2):
-        #generate cut-off (split)
-        split = random.randint(1, len(parent1)-1)
+        # generate cut-off (split)
+        split = random.randint(1, len(parent1) - 1)
 
         # Perform crossover
         child1_lst = list(parent1[0:split] + parent2[split:len(parent1)])
@@ -311,7 +369,7 @@ class PuzzleTwo(Puzzle):
         return (child1_lst, child2_lst)
 
     def repair(self, gene_lst):
-        bins = {0:[], 1:[], 2:[]}
+        bins = {0: [], 1: [], 2: []}
 
         while True:
             i = 0
@@ -322,7 +380,7 @@ class PuzzleTwo(Puzzle):
             if (len(bins[0]) == len(bins[1])) and (len(bins[1]) == len(bins[2])):
                 break
 
-            #find bins with largest number of elements and swap elements that are the same in both lists
+            # find bins with largest number of elements and swap elements that are the same in both lists
             largest_bin = max(bins.iterkeys(), key=(lambda key: len(bins[key])))
             smallest_bin = min(bins.iterkeys(), key=(lambda key: len(bins[key])))
 
@@ -339,18 +397,18 @@ class PuzzleTwo(Puzzle):
             if random.uniform(0, 1) < 0.01:
                 available_bins = [0, 1, 2]
 
-                #Select a bin randomly
+                # Select a bin randomly
                 firstBin = bin_i
                 available_bins.remove(firstBin)
 
-                #Select a random number in that bin
+                # Select a random number in that bin
                 index_in_gene1 = i
 
-                #Select another bin randomly
+                # Select another bin randomly
                 secondBin = random.choice(available_bins)
 
-                #Select a random number in that bin
-                index_in_bin2 = random.randint(0, len(self.input)/3 - 1)
+                # Select a random number in that bin
+                index_in_bin2 = random.randint(0, len(self.input) / 3 - 1)
                 count = 0
                 for i in range(len(gene_lst)):
                     if gene_lst[i] == secondBin:
@@ -360,7 +418,7 @@ class PuzzleTwo(Puzzle):
 
                         count += 1
 
-                #Switch the two random numbers found
+                # Switch the two random numbers found
                 temp = gene_lst[index_in_gene1]
                 gene_lst[index_in_gene1] = gene_lst[index_in_gene2]
                 gene_lst[index_in_gene2] = temp
@@ -371,12 +429,12 @@ class PuzzleTwo(Puzzle):
         if (score) > 0:
             return score
         else:
-            return 1/math.fabs(score)
+            return 1 / math.fabs(score)
 
     def convertRepresentationToString(self, gene):
-        return '\n'.join([' '.join(["Bin #1:"]+[str(self.input[i]) for i in range(len(gene)) if gene[i] == 0]),
-                         ' '.join(["Bin #2:"]+[str(self.input[i]) for i in range(len(gene)) if gene[i] == 1]),
-                         ' '.join(["Bin #3:"]+[str(self.input[i]) for i in range(len(gene)) if gene[i] == 2])])
+        return '\n'.join([' '.join(["Bin #1:"] + [str(self.input[i]) for i in range(len(gene)) if gene[i] == 0]),
+                          ' '.join(["Bin #2:"] + [str(self.input[i]) for i in range(len(gene)) if gene[i] == 1]),
+                          ' '.join(["Bin #3:"] + [str(self.input[i]) for i in range(len(gene)) if gene[i] == 2])])
 
     def getScore(self, gene):
         product = 1
@@ -396,6 +454,7 @@ class PuzzleTwo(Puzzle):
 
     def converged(self):
         return False
+
 
 class PuzzleThree(Puzzle):
     def getInputRepresentation(self, str_list):
@@ -423,8 +482,8 @@ class PuzzleThree(Puzzle):
         return tuple(gene)
 
     def crossover(self, parent1, parent2):
-        #generate cut-off (split)
-        split = random.randint(1, min(len(parent1), len(parent2))-1)
+        # generate cut-off (split)
+        split = random.randint(1, min(len(parent1), len(parent2)) - 1)
 
         # Perform crossover
         child1_lst = list(parent1[0:split] + parent2[split:len(parent2)])
@@ -473,7 +532,7 @@ class PuzzleThree(Puzzle):
         (score, legalityScore) = self.getScoreTuple(gene)
 
         if score < 0:
-            return 1/math.abs(score) * legalityScore
+            return 1 / math.abs(score) * legalityScore
         else:
             return score + legalityScore
 
@@ -481,7 +540,7 @@ class PuzzleThree(Puzzle):
         return False
 
     def convertRepresentationToString(self, gene):
-        return "\n".join([str(self.input[i]) for i in range(len(gene))])
+        return "\n".join([str(self.input[gene[i]]) for i in range(len(gene))])
 
     def getScore(self, gene):
         return self.getScoreTuple(gene)[0]
@@ -493,7 +552,7 @@ class PuzzleThree(Puzzle):
         isLegal = self.getLegalityPoints(gene) == 1
 
         if isLegal:
-            score = 10 + math.pow(len(gene),2) - self.getCost(gene)
+            score = 10 + math.pow(len(gene), 2) - self.getCost(gene)
 
         return (score, legalityScore)
 
@@ -501,7 +560,7 @@ class PuzzleThree(Puzzle):
         legality_recip = 1
 
         towerLen = len(gene)
-        #Check that there is a door on the bottom and look out at the top
+        # Check that there is a door on the bottom and look out at the top
         if self.input[gene[0]][0] != "Door":
             legality_recip += 100
 
@@ -512,27 +571,27 @@ class PuzzleThree(Puzzle):
         for i in range(towerLen):
             piece = self.input[gene[i]]
 
-            #Check that each consecutive piece width is always larger
+            # Check that each consecutive piece width is always larger
             if previous_piece is not None:
                 if piece[1] > previous_piece[1]:
                     legality_recip += 1
 
-            #Check that all the pieces in the middle of the tower are walls
+            # Check that all the pieces in the middle of the tower are walls
             if i != 0 and i != towerLen - 1:
                 if piece[0] != "Wall":
                     legality_recip += 50
 
-            #Check that each piece can support pieces above it
-            if piece[2] < towerLen-1-i:
+            # Check that each piece can support pieces above it
+            if piece[2] < towerLen - 1 - i:
                 legality_recip += 1
 
             previous_piece = piece
 
-
-        return 1.0/legality_recip
+        return 1.0 / legality_recip
 
     def getCost(self, gene):
         return sum([self.input[gene[i]][3] for i in range(len(gene))])
+
 
 if __name__ == "__main__":
     (puzzleNum, filePath, secs) = getArgs()
